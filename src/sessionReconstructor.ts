@@ -62,6 +62,7 @@ export function reconstructSessionTiming(
           startTime,
           endTime,
           timezone,
+          timingSource: "commits",
         };
       }
     }
@@ -91,18 +92,6 @@ export function hasTimingInfo(session: Session): boolean {
 /**
  * Get timing source for a session (for reporting).
  */
-export function getTimingSource(session: Session): "annotation" | "commits" | "none" {
-  // This is a simplified check - in practice we'd need to track how timing was derived
-  if (session.startTime && session.endTime) {
-    // Check if timing came from commits by looking at the seconds
-    // Annotations only have HH:MM, so seconds are always 00
-    if (
-      session.startTime.getSeconds() !== 0 ||
-      session.endTime.getSeconds() !== 0
-    ) {
-      return "commits";
-    }
-    return "annotation";
-  }
-  return "none";
+export function getTimingSource(session: Session): "annotation" | "commits" | "inferred" {
+  return session.timingSource;
 }

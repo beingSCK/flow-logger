@@ -16,6 +16,8 @@ export interface Session {
   endTime?: Date;
   /** Timezone for the session, defaults to America/Los_Angeles */
   timezone: string;
+  /** How timing was determined (annotation, commits, or inferred) */
+  timingSource: "annotation" | "commits" | "inferred";
   /** Commit hashes found in the session content */
   commits: string[];
   /** Items from "What I Worked On" section */

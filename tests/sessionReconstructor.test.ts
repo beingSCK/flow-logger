@@ -13,6 +13,7 @@ describe("sessionReconstructor", () => {
     project: "Test Project",
     theme: "Test Theme",
     timezone: "America/Los_Angeles",
+    timingSource: "inferred",
     commits: [],
     outcomes: ["Did stuff"],
     learnings: [],
@@ -78,27 +79,31 @@ describe("sessionReconstructor", () => {
   });
 
   describe("getTimingSource", () => {
-    it("should return 'annotation' for times with zero seconds", () => {
+    it("should return 'annotation' for explicitly annotated sessions", () => {
       const session = makeSession({
         startTime: new Date("2026-01-15T10:30:00"),
         endTime: new Date("2026-01-15T12:00:00"),
+        timingSource: "annotation",
       });
 
       expect(getTimingSource(session)).toBe("annotation");
     });
 
-    it("should return 'commits' for times with non-zero seconds", () => {
+    it("should return 'commits' for timing inferred from commits", () => {
       const session = makeSession({
         startTime: new Date("2026-01-15T10:30:45"),
         endTime: new Date("2026-01-15T12:15:23"),
+        timingSource: "commits",
       });
 
       expect(getTimingSource(session)).toBe("commits");
     });
 
-    it("should return 'none' when no timing info", () => {
-      const session = makeSession();
-      expect(getTimingSource(session)).toBe("none");
+    it("should return 'inferred' when no timing info", () => {
+      const session = makeSession({
+        timingSource: "inferred",
+      });
+      expect(getTimingSource(session)).toBe("inferred");
     });
   });
 });

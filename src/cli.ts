@@ -189,10 +189,22 @@ function parseArgs(args: string[]): CliOptions {
     if (arg === "--dry-run") {
       options.dryRun = true;
     } else if (arg === "--file") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --file requires a path argument");
+        process.exit(1);
+      }
       options.filePath = args[++i];
     } else if (arg === "--dir") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --dir requires a path argument");
+        process.exit(1);
+      }
       options.dirPath = args[++i];
     } else if (arg === "--from") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --from requires a date argument");
+        process.exit(1);
+      }
       const dateStr = args[++i];
       const date = parseDate(dateStr);
       if (!date) {
@@ -201,6 +213,10 @@ function parseArgs(args: string[]): CliOptions {
       }
       options.fromDate = date;
     } else if (arg === "--to") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --to requires a date argument");
+        process.exit(1);
+      }
       const dateStr = args[++i];
       const date = parseDate(dateStr);
       if (!date) {
@@ -209,6 +225,10 @@ function parseArgs(args: string[]): CliOptions {
       }
       options.toDate = date;
     } else if (arg === "--repo") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --repo requires a path argument");
+        process.exit(1);
+      }
       options.repoPath = args[++i];
     } else if (!arg.startsWith("-")) {
       // Positional argument: could be file or directory
