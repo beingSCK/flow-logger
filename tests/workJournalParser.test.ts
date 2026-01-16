@@ -146,6 +146,17 @@ describe("workJournalParser", () => {
       const sessions = parseJournalFile(testFilePath);
       expect(sessions[0].sourceFile).toBe(testFilePath);
     });
+
+    it("should set timingSource to 'annotation' when time annotation exists", () => {
+      const sessions = parseJournalFile(testFilePath);
+      expect(sessions[1].timingSource).toBe("annotation"); // Session 2 has time annotation
+    });
+
+    it("should set timingSource to 'inferred' when no time annotation", () => {
+      const sessions = parseJournalFile(testFilePath);
+      expect(sessions[0].timingSource).toBe("inferred"); // Session 1 has no time annotation
+      expect(sessions[2].timingSource).toBe("inferred"); // Session 3 has no time annotation
+    });
   });
 
   describe("edge cases", () => {

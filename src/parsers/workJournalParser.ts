@@ -30,6 +30,9 @@ export function parseJournalFile(filePath: string): Session[] {
     const outcomes = extractOutcomes(sessionContent);
     const learnings = extractLearnings(sessionContent);
 
+    // Set timing source based on whether annotation was found
+    const timingSource = (startTime && endTime) ? "annotation" : "inferred";
+
     return {
       date,
       sessionNumber,
@@ -38,6 +41,7 @@ export function parseJournalFile(filePath: string): Session[] {
       startTime,
       endTime,
       timezone: DEFAULT_TIMEZONE,
+      timingSource,
       commits,
       outcomes,
       learnings,
