@@ -5,11 +5,16 @@ CLI tool to extract working sessions from work journals and create Google Calend
 ## Commands
 
 ```bash
-bun run src/cli.ts --dry-run <file>      # Parse single journal file
-bun run src/cli.ts --dir <dir> --from <date> --to <date>  # Process date range
+bun run src/cli.ts --dry-run <file>      # Parse and preview calendar events
+bun run src/cli.ts --execute --dir <dir> --from <date>  # Create events
 bun run src/cli.ts --help                # Show usage
 bun test                                  # Run tests
 ```
+
+## First-Time Setup (for --execute)
+
+1. Copy `cli-tokens.json` from calendar-automaton project, or
+2. Create OAuth credentials with Google Calendar API scope
 
 ## Architecture
 
@@ -17,10 +22,13 @@ bun test                                  # Run tests
 src/
 ├── types.ts                    # Session, FlowCalendarEvent interfaces
 ├── sessionReconstructor.ts     # Infer timing from commits when no annotation
+├── calendarService.ts          # Google Calendar API integration
+├── calendarEventCreator.ts     # Session -> FlowCalendarEvent conversion
+├── cliAuth.ts                  # File-based OAuth token management
 ├── parsers/
 │   ├── workJournalParser.ts    # Parse markdown -> Session[]
 │   └── gitLogParser.ts         # Extract commit timestamps from git repos
-└── cli.ts                      # CLI entry point with date range filtering
+└── cli.ts                      # CLI entry point with --execute flag
 ```
 
 ## Work Journal Format
@@ -44,8 +52,8 @@ The parser expects markdown files with this structure:
 | Version | Scope |
 |---------|-------|
 | v0.1 | Parser and dry-run CLI |
-| v0.2 (current) | Historical backfill, date range filtering, commit timing |
-| v0.3 | Google Calendar integration, "flow" color events |
+| v0.2 | Historical backfill, date range filtering, commit timing |
+| v0.3 (current) | Google Calendar integration, "flow" color events |
 
 ## Related Projects
 
