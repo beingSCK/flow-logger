@@ -295,7 +295,7 @@ async function confirmAction(message: string): Promise<boolean> {
 /**
  * Calculate date range for fetching existing events (for deduplication)
  */
-function getDateRange(sessions: Session[]): { daysBack: number; daysForward: number } {
+function getDateRange(sessions: Session[]): { timeMin: string; timeMax: string } {
   const now = new Date();
   let minDate = now;
   let maxDate = now;
@@ -309,10 +309,11 @@ function getDateRange(sessions: Session[]): { daysBack: number; daysForward: num
     }
   }
 
-  const daysBack = Math.ceil((now.getTime() - minDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-  const daysForward = Math.ceil((maxDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  // Add 1 day buffer on each end for safety
+  const timeMin = new Date(minDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(maxDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-  return { daysBack: Math.max(daysBack, 1), daysForward: Math.max(daysForward, 1) };
+  return { timeMin, timeMax };
 }
 
 async function main(): Promise<void> {
@@ -441,11 +442,11 @@ async function main(): Promise<void> {
 
     // Fetch existing events for deduplication
     console.log("\nChecking for existing events...");
-    const { daysBack, daysForward } = getDateRange(allSessions);
+    const { timeMin, timeMax } = getDateRange(allSessions);
 
     let existingEvents: FlowCalendarEvent[] = [];
     try {
-      existingEvents = await fetchEvents(daysBack, daysForward, getAccessToken);
+      existingEvents = await fetchEvents(timeMin, timeMax, getAccessToken);
       console.log(`Found ${existingEvents.length} existing event(s) in date range.`);
     } catch (error) {
       console.error("Warning: Could not fetch existing events:", error);

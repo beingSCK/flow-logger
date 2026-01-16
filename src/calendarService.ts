@@ -15,41 +15,48 @@ export type TokenGetter = () => Promise<string>;
 /**
  * Fetch upcoming events from the primary calendar.
  * Used for deduplication - checking if flow events already exist.
+ * Handles pagination to fetch all events in the time range.
  */
 export async function fetchEvents(
-  daysBack: number,
-  daysForward: number,
+  timeMin: string,
+  timeMax: string,
   getToken: TokenGetter
 ): Promise<FlowCalendarEvent[]> {
-  const token = await getToken();
+  const allEvents: FlowCalendarEvent[] = [];
+  let pageToken: string | undefined;
 
-  const now = new Date();
-  const timeMin = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000).toISOString();
-  const timeMax = new Date(now.getTime() + daysForward * 24 * 60 * 60 * 1000).toISOString();
+  do {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "500",
+      fields: "items(id,summary,start,end,colorId,description),nextPageToken",
+    });
+    if (pageToken) {
+      params.set("pageToken", pageToken);
+    }
 
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: "500",
-    fields: "items(id,summary,start,end,colorId,description)",
-  });
+    const token = await getToken();
+    const response = await fetch(
+      `${CALENDAR_API_BASE}/calendars/primary/events?${params}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
 
-  const response = await fetch(`${CALENDAR_API_BASE}/calendars/primary/events?${params}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Calendar API error (${response.status}): ${error}`);
+    }
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Calendar API error (${response.status}): ${error}`);
-  }
+    const data = await response.json();
+    allEvents.push(...(data.items || []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
 
-  const data = await response.json();
-  return (data.items || []) as FlowCalendarEvent[];
+  return allEvents;
 }
 
 /**
