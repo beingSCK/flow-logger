@@ -2,13 +2,21 @@
 
 import { parseJournalFile } from "./parsers/workJournalParser";
 import { reconstructSessionTiming, getTimingSource } from "./sessionReconstructor";
+import { sessionsToCalendarEvents, getEventSummary } from "./calendarEventCreator";
+import {
+  fetchEvents,
+  filterDuplicates,
+  insertFlowEvents,
+} from "./calendarService";
+import { getAccessToken, isAuthConfigured } from "./cliAuth";
 import { basename, join, dirname } from "path";
 import { existsSync, readdirSync, statSync } from "fs";
-import type { Session } from "./types";
+import type { Session, FlowCalendarEvent } from "./types";
+import * as readline from "readline";
 
 function printUsage(): void {
   console.log(`
-flow-logger - Extract working sessions from work journals
+flow-logger - Extract working sessions from work journals and create calendar events
 
 Usage:
   bun run src/cli.ts [options] <file-or-directory>
@@ -16,11 +24,13 @@ Usage:
 
 Options:
   --dry-run         Parse and display sessions without creating calendar events (default)
+  --execute         Actually create calendar events (requires cli-tokens.json)
   --file <path>     Path to a single journal file to process
   --dir <path>      Path to directory containing journal files (YYYY-MM-DD.md)
   --from <date>     Start date for filtering (YYYY-MM-DD format)
   --to <date>       End date for filtering (YYYY-MM-DD format, inclusive)
   --repo <path>     Git repository path for commit timestamp lookup
+  --yes             Skip confirmation prompt when using --execute
   --help            Show this help message
 
 Date Range Examples:
@@ -29,6 +39,13 @@ Date Range Examples:
 
   # Process a specific date range
   bun run src/cli.ts --dir ~/work-journal --from 2026-01-01 --to 2026-01-15
+
+Calendar Examples:
+  # Preview events that would be created
+  bun run src/cli.ts --dry-run --dir ~/work-journal --from 2026-01-01
+
+  # Actually create calendar events
+  bun run src/cli.ts --execute --dir ~/work-journal --from 2026-01-01
 
 Single File Examples:
   bun run src/cli.ts --dry-run ~/work-journal/2026-01-15.md
@@ -166,6 +183,8 @@ function expandPath(path: string): string {
 
 interface CliOptions {
   dryRun: boolean;
+  execute: boolean;
+  skipConfirm: boolean;
   filePath: string | null;
   dirPath: string | null;
   fromDate: Date | null;
@@ -176,6 +195,8 @@ interface CliOptions {
 function parseArgs(args: string[]): CliOptions {
   const options: CliOptions = {
     dryRun: true,
+    execute: false,
+    skipConfirm: false,
     filePath: null,
     dirPath: null,
     fromDate: null,
@@ -188,6 +209,12 @@ function parseArgs(args: string[]): CliOptions {
 
     if (arg === "--dry-run") {
       options.dryRun = true;
+      options.execute = false;
+    } else if (arg === "--execute") {
+      options.execute = true;
+      options.dryRun = false;
+    } else if (arg === "--yes" || arg === "-y") {
+      options.skipConfirm = true;
     } else if (arg === "--file") {
       options.filePath = args[++i];
     } else if (arg === "--dir") {
@@ -228,7 +255,47 @@ function parseArgs(args: string[]): CliOptions {
   return options;
 }
 
-function main(): void {
+/**
+ * Prompt user for confirmation
+ */
+async function confirmAction(message: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${message} [y/N] `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
+    });
+  });
+}
+
+/**
+ * Calculate date range for fetching existing events (for deduplication)
+ */
+function getDateRange(sessions: Session[]): { daysBack: number; daysForward: number } {
+  const now = new Date();
+  let minDate = now;
+  let maxDate = now;
+
+  for (const session of sessions) {
+    if (session.startTime && session.startTime < minDate) {
+      minDate = session.startTime;
+    }
+    if (session.endTime && session.endTime > maxDate) {
+      maxDate = session.endTime;
+    }
+  }
+
+  const daysBack = Math.ceil((now.getTime() - minDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  const daysForward = Math.ceil((maxDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+  return { daysBack: Math.max(daysBack, 1), daysForward: Math.max(daysForward, 1) };
+}
+
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes("--help")) {
@@ -237,6 +304,13 @@ function main(): void {
   }
 
   const options = parseArgs(args);
+
+  // Check auth for execute mode
+  if (options.execute && !isAuthConfigured()) {
+    console.error("Error: --execute requires cli-tokens.json for Google Calendar auth.");
+    console.error("Copy cli-tokens.json from calendar-automaton or set up OAuth tokens.");
+    process.exit(1);
+  }
 
   // Determine files to process
   let filesToProcess: string[] = [];
@@ -305,7 +379,7 @@ function main(): void {
     sessionsByDate.set(session.date, existing);
   }
 
-  // Display results
+  // Display session summary
   console.log(`\nProcessed ${filesToProcess.length} journal file(s)`);
   console.log(`Found ${totalSessions} session(s), ${sessionsWithTiming} with timing info\n`);
   console.log("=".repeat(60));
@@ -320,9 +394,81 @@ function main(): void {
     }
   }
 
+  // Convert sessions to calendar events
+  const { events, skipped } = sessionsToCalendarEvents(allSessions);
+
+  if (skipped.length > 0) {
+    console.log(`\nSkipped ${skipped.length} session(s) without timing info.`);
+  }
+
+  if (events.length === 0) {
+    console.log("\nNo events to create (no sessions with timing info).");
+    process.exit(0);
+  }
+
+  // Handle dry-run vs execute mode
   if (options.dryRun) {
-    console.log("(dry-run mode - no calendar events created)");
+    console.log("\n" + "=".repeat(60));
+    console.log("CALENDAR EVENTS (dry-run):");
+    console.log("=".repeat(60));
+    console.log(getEventSummary(events));
+    console.log("\n(dry-run mode - use --execute to create calendar events)");
+  } else if (options.execute) {
+    console.log("\n" + "=".repeat(60));
+    console.log("CALENDAR EVENTS TO CREATE:");
+    console.log("=".repeat(60));
+    console.log(getEventSummary(events));
+
+    // Fetch existing events for deduplication
+    console.log("\nChecking for existing events...");
+    const { daysBack, daysForward } = getDateRange(allSessions);
+
+    let existingEvents: FlowCalendarEvent[] = [];
+    try {
+      existingEvents = await fetchEvents(daysBack, daysForward, getAccessToken);
+      console.log(`Found ${existingEvents.length} existing event(s) in date range.`);
+    } catch (error) {
+      console.error("Warning: Could not fetch existing events:", error);
+    }
+
+    // Filter duplicates
+    const { toCreate, duplicates } = filterDuplicates(events, existingEvents);
+
+    if (duplicates.length > 0) {
+      console.log(`\nSkipping ${duplicates.length} duplicate event(s) that already exist.`);
+    }
+
+    if (toCreate.length === 0) {
+      console.log("\nNo new events to create (all already exist).");
+      process.exit(0);
+    }
+
+    console.log(`\n${toCreate.length} new event(s) to create.`);
+
+    // Confirm unless --yes
+    if (!options.skipConfirm) {
+      const confirmed = await confirmAction("Create these calendar events?");
+      if (!confirmed) {
+        console.log("Cancelled.");
+        process.exit(0);
+      }
+    }
+
+    // Create events
+    console.log("\nCreating events...");
+    const result = await insertFlowEvents(toCreate, getAccessToken);
+
+    console.log(`\nDone! Created ${result.success} event(s).`);
+    if (result.failed > 0) {
+      console.log(`Failed to create ${result.failed} event(s).`);
+      for (const error of result.errors) {
+        console.error(`  - ${error}`);
+      }
+    }
   }
 }
 
-main();
+main().catch((error) => {
+  console.error("Error:", error);
+  process.exit(1);
+});
