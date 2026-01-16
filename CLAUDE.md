@@ -5,9 +5,10 @@ CLI tool to extract working sessions from work journals and create Google Calend
 ## Commands
 
 ```bash
-bun run src/cli.ts --dry-run <file>  # Parse journal and show sessions
-bun run src/cli.ts --help            # Show usage
-bun test                              # Run tests
+bun run src/cli.ts --dry-run <file>      # Parse single journal file
+bun run src/cli.ts --dir <dir> --from <date> --to <date>  # Process date range
+bun run src/cli.ts --help                # Show usage
+bun test                                  # Run tests
 ```
 
 ## Architecture
@@ -15,9 +16,11 @@ bun test                              # Run tests
 ```
 src/
 ├── types.ts                    # Session, FlowCalendarEvent interfaces
+├── sessionReconstructor.ts     # Infer timing from commits when no annotation
 ├── parsers/
-│   └── workJournalParser.ts    # Parse markdown -> Session[]
-└── cli.ts                      # CLI entry point with --dry-run
+│   ├── workJournalParser.ts    # Parse markdown -> Session[]
+│   └── gitLogParser.ts         # Extract commit timestamps from git repos
+└── cli.ts                      # CLI entry point with date range filtering
 ```
 
 ## Work Journal Format
@@ -40,8 +43,8 @@ The parser expects markdown files with this structure:
 
 | Version | Scope |
 |---------|-------|
-| v0.1 (current) | Parser and dry-run CLI |
-| v0.2 | Historical backfill, timezone handling, edge cases |
+| v0.1 | Parser and dry-run CLI |
+| v0.2 (current) | Historical backfill, date range filtering, commit timing |
 | v0.3 | Google Calendar integration, "flow" color events |
 
 ## Related Projects
