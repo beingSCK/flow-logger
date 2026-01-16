@@ -32,15 +32,13 @@ _Last updated: 2026-01-15_
 
 **PR #1:** Add README with usage examples and roadmap
 - Branch: `feature/add-readme`
-- Status: Awaiting code-review
-- URL: https://github.com/beingSCK/flow-logger/pull/1 (once created)
+- Status: Merged
+- URL: https://github.com/beingSCK/flow-logger/pull/1
 
 ## Next Steps
 
-1. **Create PR #1** via `gh pr create`
-2. **Run `/code-review`** on PR #1
-3. **Merge** if review passes
-4. **v0.2 planning** - historical backfill, timezone handling
+1. **v0.2** - Historical backfill with date range filtering and timezone handling
+2. **v0.3** - Google Calendar integration with event creation
 
 ## Ideas Deferred
 
